@@ -1,0 +1,16 @@
+name = "GridapMixedViscoelasticityReactionDiffusion"
+uuid = "826f7d37-cdc9-41ca-8b8c-83e04b25228a"
+authors = ["Mathieu Barre <mathieu.barre@monash.edu>", "Ricardo Ruiz Baier <ricardo.ruizbaier@monash.edu>"]
+version = "1.0.0-DEV"
+
+[deps]
+Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
+
+[compat]
+julia = "1.7"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
