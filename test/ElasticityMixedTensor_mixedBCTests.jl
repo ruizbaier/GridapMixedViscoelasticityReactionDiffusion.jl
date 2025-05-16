@@ -12,9 +12,11 @@ module ElasticityMixedTensor_mixedBCTests
   const λ = (E*ν)/((1+ν)*(1-2*ν))
   const μ = E/(2*(1+ν))
 
+  CC(τ) = 2*μ*τ + λ*tr(τ)*I
+
   uex(x) = VectorValue(0.05*cos(1.5*π*(x[1]+x[2])),0.05*sin(1.5*π*(x[1]-x[2])))
-  σex(x) =  2*μ*ε(uex)(x) + λ*tr(ε(uex)(x))*I
-  ηex(x) = 0.5*(∇(uex)(x) - transpose(∇(uex)(x)))
+  σex(x) = (CC∘ε(uex))(x)  #2*μ*ε(uex)(x) + λ*tr(ε(uex)(x))*I
+  γex(x) = 0.5*(∇(uex)(x) - transpose(∇(uex)(x)))
   fex(x) = -(∇⋅σex)(x)
 
   function extract_component(component)
@@ -51,7 +53,7 @@ module ElasticityMixedTensor_mixedBCTests
   setup_model_labels_unit_square!(model)
 
 
-  # function solve_elasticityMixed(model)
+  function solve_elasticityMixed(model)
 
   # Reference FEs
   k = 0
@@ -93,7 +95,7 @@ module ElasticityMixedTensor_mixedBCTests
 
   a(σ1,σ2,τ1,τ2) = ∫(1/(2*μ)*(σ1⋅τ1 + σ2⋅τ2)
                  - λ/(2*μ + 2*λ)*(comp1∘σ1 + comp2∘σ2)*(comp1∘τ1+comp2∘τ2))dΩ
-  b(τ1,τ2,v,η) = ∫((comp1∘v)*(∇⋅τ1)+(comp2∘v)*(∇⋅τ2) + η*(comp2∘τ1 - comp1∘τ2))dΩ
+  b(τ1,τ2,v,η) = ∫((comp1∘v)*(∇⋅τ1)+(comp2∘v)*(∇⋅τ2) - η*(comp2∘τ1 - comp1∘τ2))dΩ
 
   F(τ1,τ2) =  ∫((τ1⋅n_Γu)*(comp1∘uex) + (τ2⋅n_Γu)*(comp2∘uex))dΓu 
   G(v) = ∫(-1.0*(fex⋅v))dΩ
@@ -108,49 +110,54 @@ module ElasticityMixedTensor_mixedBCTests
               ∫( ((row1∘σex)-σh1)⋅((row1∘σex)-σh1) + ((row2∘σex)-σh2)⋅((row2∘σex)-σh2))dΩ
               + ∫( (∇⋅(row1∘σex)-∇⋅σh1)*(∇⋅(row1∘σex)-∇⋅σh1) + (∇⋅(row2∘σex)-∇⋅σh2)*(∇⋅(row2∘σex)-∇⋅σh2))dΩ))
   error_u = sqrt(sum(∫((uex-uh)⋅(uex-uh))dΩ))
-  error_σ,error_u, Gridap.FESpaces.num_free_dofs(X)
-  println(error_σ)
-  println(error_u)
-  # end
+  error_γ = sqrt(sum(∫((comp2∘row1∘γex-γh)*(comp2∘row1∘γex-γh))dΩ))
 
-  # eσ   = Float64[]
-  # rσ   = Float64[]
-  # eu   = Float64[]
-  # ru   = Float64[]
+  error_σ,error_u, error_γ, Gridap.FESpaces.num_free_dofs(X)
+  #println(error_σ)
+  #println(error_u)
+  end
 
-  # push!(ru,0.)
-  # push!(rσ,0.)
+  eσ   = Float64[]
+  rσ   = Float64[]
+  eu   = Float64[]
+  ru   = Float64[]
+  eγ   = Float64[]
+  rγ   = Float64[]
+  push!(ru,0.)
+  push!(rσ,0.)
+  push!(rγ,0.)
+  nn   = Int[]
+  hh   = Float64[]
 
-  # nn   = Int[]
-  # hh   = Float64[]
-
-  # nkmax = 1
-  # for nk in 1:nkmax
-  #     println("******** Refinement step: $nk")
-  #     model=generate_model_unit_square(nk) # Discrete model
-  #     setup_model_labels_unit_square!(model)
+  nkmax = 6
+  for nk in 1:nkmax
+       println("******** Refinement step: $nk")
+       model=generate_model_unit_square(nk) # Discrete model
+       setup_model_labels_unit_square!(model)
       
-  #     error_σ, error_u, ndofs=solve_elasticityMixed(model)
-  #     push!(nn,ndofs)
-  #     push!(hh,sqrt(2)/2^nk)
-  #     push!(eσ,error_σ)
-  #     push!(eu,error_u)
+       error_σ, error_u, error_γ, ndofs=solve_elasticityMixed(model)
+       push!(nn,ndofs)
+       push!(hh,sqrt(2)/2^nk)
+       push!(eσ,error_σ)
+       push!(eu,error_u)
+       push!(eγ,error_γ)
 
-  #     if nk>1
-  #       push!(rσ, log(eσ[nk]/eσ[nk-1])/log(hh[nk]/hh[nk-1]))
-  #       push!(ru, log(eu[nk]/eu[nk-1])/log(hh[nk]/hh[nk-1]))
-  #     end
-  # end
+       if nk>1
+         push!(rσ, log(eσ[nk]/eσ[nk-1])/log(hh[nk]/hh[nk-1]))
+         push!(ru, log(eu[nk]/eu[nk-1])/log(hh[nk]/hh[nk-1]))
+         push!(rγ, log(eγ[nk]/eγ[nk-1])/log(hh[nk]/hh[nk-1]))
+       end
+  end
 
-  # println("==========================================================")
-  # println("   DoF  &    h   &  e(σ)   &  r(σ)  &  e(u)   &  r(u)     ")
-  # println("==========================================================")
+  println("==========================================================")
+  println("   DoF  &    h   &  e(σ)   &  r(σ)  &  e(u)   &  r(u)     ")
+  println("==========================================================")
 
-  # for nk=1:nkmax
-  #     @printf("%7d & %.4f & %.2e & %.3f & %.2e & %.3f \n",
-  #              nn[nk], hh[nk], eσ[nk], rσ[nk], eu[nk], ru[nk]);
-  # end
+  for nk=1:nkmax
+       @printf("%7d & %.4f & %.2e & %.3f & %.2e & %.3f & %.2e & %.3f \n",
+                nn[nk], hh[nk], eσ[nk], rσ[nk], eu[nk], ru[nk], eγ[nk], rγ[nk]);
+  end
 
-  # println("==========================================================")
+  println("==========================================================")
 
 end
