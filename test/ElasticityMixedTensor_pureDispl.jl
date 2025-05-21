@@ -1,12 +1,9 @@
-module ElasticityMixedTensor_mixedBCTests
+module ElasticityMixedTensor_pureDispl
   using Gridap
   using GridapMixedViscoelasticityReactionDiffusion
   import Gridap: ∇
   using Printf
   using LinearAlgebra
-
-  # THIS ONE SEEMS TO HAVE AN ISSUE WITH THE STRESS BC. IS IT JUST THE vertex POiNTS?
-  # (not sure, since DoFs do not involve vertices...)
 
   # Material parameters
   const E = 1.0e2
@@ -35,49 +32,54 @@ module ElasticityMixedTensor_mixedBCTests
 
   # Numerical integration
   degree = 5+k
+  bdegree = 2+k
   Ω = Interior(model)
   dΩ = Measure(Ω,degree)
 
   # Boundary triangulations and outer unit normals
-  Γσ = BoundaryTriangulation(model,tags = "Gamma_sig")
-  Γu = BoundaryTriangulation(model,tags = "Gamma_u")
-  n_Γσ = get_normal_vector(Γσ)
-  n_Γu = get_normal_vector(Γu)
-  dΓσ = Measure(Γσ,degree)
-  dΓu = Measure(Γu,degree)
+  Γ = BoundaryTriangulation(model)
+  n_Γ = get_normal_vector(Γ)
+  dΓ = Measure(Γ,bdegree)
 
-  Sh_ = TestFESpace(model,reffe_σ,dirichlet_tags="Gamma_sig",conformity=:HDiv)
+  Sh1_ = TestFESpace(model,reffe_σ,conformity=:HDiv)
+  Sh2_ = TestFESpace(model,reffe_σ,conformity=:HDiv)
   Vh_ = TestFESpace(model,reffe_u,conformity=:L2)
   Gh_ = TestFESpace(model,reffe_γ,conformity=:L2)
+  Lh_ = ConstantFESpace(model)
 
-  Sh1 = TrialFESpace(Sh_,row1∘σex)
-  Sh2 = TrialFESpace(Sh_,row2∘σex)
+  Sh1 = TrialFESpace(Sh1_) 
+  Sh2 = TrialFESpace(Sh2_) 
   Vh = TrialFESpace(Vh_)
   Gh = TrialFESpace(Gh_)
+  Lh = TrialFESpace(Lh_)
 
-  Y = MultiFieldFESpace([Sh_,Sh_,Vh_,Gh_])
-  X = MultiFieldFESpace([Sh1,Sh2,Vh,Gh])
+  Y = MultiFieldFESpace([Sh1_,Sh2_,Vh_,Gh_,Lh_])
+  X = MultiFieldFESpace([Sh1,Sh2,Vh,Gh,Lh])
 
   a(σ1,σ2,τ1,τ2) = ∫(1/(2*μ)*(σ1⋅τ1 + σ2⋅τ2))dΩ -
                    ∫(λ/(2*μ*(2*μ+ 2*λ))*(comp1∘σ1+comp2∘σ2)*(comp1∘τ1+comp2∘τ2))dΩ
- 
-  b(τ1,τ2,v,η) = ∫((comp1∘v)*(∇⋅τ1)+(comp2∘v)*(∇⋅τ2) + η*(comp2∘τ1-comp1∘τ2))dΩ
+                   
+  b(τ1,τ2,v,η) = ∫((comp1∘v)*(∇⋅τ1)+(comp2∘v)*(∇⋅τ2))dΩ + 
+                 ∫(η*(comp2∘τ1 - comp1∘τ2))dΩ
 
-  F(τ1,τ2) =  ∫((τ1⋅n_Γu)*(comp1∘uex) + (τ2⋅n_Γu)*(comp2∘uex))dΓu 
+  c(τ1,τ2,ζ) = ∫((comp1∘τ1+comp2∘τ2)*ζ)dΩ
+
+  F(τ1,τ2) =  ∫((τ1⋅n_Γ)*(comp1∘uex) + (τ2⋅n_Γ)*(comp2∘uex))dΓ
   G(v) = ∫(fex⋅v)dΩ
+  H(ζ) = ∫((tr∘σex)*ζ)dΩ
 
-  lhs((σ1,σ2,u,γ),(τ1,τ2,v,η)) =  a(σ1,σ2,τ1,τ2) + b(τ1,τ2,u,γ) + b(σ1,σ2,v,η) 
-  rhs((τ1,τ2,v,η)) =  F(τ1,τ2) - G(v) 
-
+  lhs((σ1,σ2,u,γ,ξ),(τ1,τ2,v,η,ζ)) =  a(σ1,σ2,τ1,τ2) + b(τ1,τ2,u,γ) + b(σ1,σ2,v,η) + c(τ1,τ2,ξ) + c(σ1,σ2,ζ)
+  rhs((τ1,τ2,v,η,ζ)) =  F(τ1,τ2) - G(v) + H(ζ)
+  
   op = AffineFEOperator(lhs,rhs,X,Y) 
 
-  σh1, σh2, uh, γh = solve(op)
+  σh1, σh2, uh, γh, _ = solve(op)
 
   if generate_output 
-      writevtk(Ω,"convergence_AFW=$(num_cells(model))",order=1,
-            cellfields=["σ1"=>σh1,"σ2"=>σh2, "u"=>uh, "γ"=>γh])
+      writevtk(Ω,"convergence_AFW_natural=$(num_cells(model))",order=1,
+            cellfields=["σ1"=>σh1, "σ2"=>σh2, "u"=>uh, "γ"=>γh])
   end
-
+  
   eσ1h = (row1∘σex)-σh1
   eσ2h = (row2∘σex)-σh2
   euh  = uex-uh
@@ -105,9 +107,7 @@ module ElasticityMixedTensor_mixedBCTests
 
     for nk in 1:nkmax
        println("******** Refinement step: $nk")
-       model=generate_model_unit_square(nk) # Discrete model
-       setup_model_labels_unit_square!(model)
-      
+       model=generate_model_unit_square(nk) 
        error_σ, error_u, error_γ, ndofs=solve_elasticityMixed(model; k=k, generate_output=generate_output)
        push!(nn,ndofs)
        push!(hh,sqrt(2)/2^nk)
@@ -133,5 +133,5 @@ module ElasticityMixedTensor_mixedBCTests
 
     println("========================================================================")
   end
-  convergence_test(;nkmax=7,k=0,generate_output=true)
+  convergence_test(;nkmax=6,k=1,generate_output=true)
 end

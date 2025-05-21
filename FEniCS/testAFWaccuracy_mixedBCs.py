@@ -24,8 +24,10 @@ symgr      = lambda vec: sym(grad(vec))
 skewgr     = lambda vec: grad(vec) - symgr(vec)
 Cinv = lambda s: 0.5/mu * s - lmbda/(2.*mu*(d*lmbda+2.*mu))*tr(s)*Identity(d)
 
+
 # ******* Exact solutions and forcing terms for error analysis ****** #
 u_str = '(0.1*cos(pi*x)*sin(pi*y)+0.15*x**2/lmbda, -0.1*sin(pi*x)*cos(pi*y)+0.15*y**2/lmbda)'
+#u_str = '(0.05*cos(1.5*pi*(x+y)),0.05*sin(1.5*pi*(x-y)))'
 
 k=0; nkmax = 6
 hh = []; nn = []; eu = []; ru = [];
@@ -90,7 +92,8 @@ for nk in range(nkmax):
 
     # ********* Weak forms ********* #
     
-    a  = inner(Cinv(sigma),tau)*dx    
+    #a  = inner(Cinv(sigma),tau)*dx  IS THE SAME
+    a = 1/(2*mu)*inner(sigma,tau)*dx - lmbda/(2*mu*(2*mu+2*lmbda))*tr(sigma)*tr(tau)*dx  
     bt = dot(u,div(tau))*dx + inner(rho,tau) *dx
     b  = dot(v,div(sigma))*dx + inner(eta,sigma) *dx 
 
