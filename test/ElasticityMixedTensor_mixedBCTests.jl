@@ -1,12 +1,12 @@
 module ElasticityMixedTensor_mixedBCTests
   using Gridap
-  using GridapMixedViscoelasticityReactionDiffusion
+  #using GridapMixedViscoelasticityReactionDiffusion
   import Gridap: ∇
   using Printf
   using LinearAlgebra
 
-  # THIS ONE SEEMS TO HAVE AN ISSUE WITH THE STRESS BC. IS IT JUST THE vertex POiNTS?
-  # (not sure, since DoFs do not involve vertices...)
+  push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
+  using GridapMixedViscoelasticityReactionDiffusion
 
   # Material parameters
   const E = 1.0e2
@@ -14,9 +14,10 @@ module ElasticityMixedTensor_mixedBCTests
   const λ = (E*ν)/((1+ν)*(1-2*ν))
   const μ = E/(2*(1+ν))
 
-  calC(τ) = 2*μ*τ + λ*tr(τ)*I
+  calC(τ) = 2*μ*τ + λ*tr(τ)*one(τ)
 
-  uex(x) = VectorValue(0.1*cos(π*x[1])*sin(π*x[2])+0.15/λ*x[1]^2,-0.1*sin(π*x[1])*cos(π*x[2])+0.15/λ*x[2]^2)
+  uex(x) = VectorValue(0.1*cos(π*x[1])*sin(π*x[2])+0.15/λ*x[1]^2,
+                      -0.1*sin(π*x[1])*cos(π*x[2])+0.15/λ*x[2]^2)
   σex(x) = (calC∘ε(uex))(x)
   γex(x) = 0.5*(∇(uex)(x) - transpose(∇(uex)(x)))
   fex(x) = -(∇⋅σex)(x)
@@ -41,9 +42,9 @@ module ElasticityMixedTensor_mixedBCTests
   # Boundary triangulations and outer unit normals
   Γσ = BoundaryTriangulation(model,tags = "Gamma_sig")
   Γu = BoundaryTriangulation(model,tags = "Gamma_u")
-  n_Γσ = get_normal_vector(Γσ)
+  #n_Γσ = get_normal_vector(Γσ) 
   n_Γu = get_normal_vector(Γu)
-  dΓσ = Measure(Γσ,degree)
+  #dΓσ = Measure(Γσ,degree)
   dΓu = Measure(Γu,degree)
 
   Sh_ = TestFESpace(model,reffe_σ,dirichlet_tags="Gamma_sig",conformity=:HDiv)
@@ -73,9 +74,11 @@ module ElasticityMixedTensor_mixedBCTests
 
   σh1, σh2, uh, γh = solve(op)
 
-  if generate_output 
-      writevtk(Ω,"convergence_AFW=$(num_cells(model))",order=1,
+  if generate_output
+    vtk_dir = joinpath(@__DIR__, "paraview-data")
+      writevtk(Ω,joinpath(vtk_dir,"convergence_AFW=$(num_cells(model))"),order=1,
             cellfields=["σ1"=>σh1,"σ2"=>σh2, "u"=>uh, "γ"=>γh])
+      writevtk(model,joinpath(vtk_dir,"model"))
   end
 
   eσ1h = (row1∘σex)-σh1
