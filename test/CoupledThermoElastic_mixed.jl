@@ -176,8 +176,6 @@ module CoupledThermoElastic_mixed
     println("*** Solving Diffusive model")
     θh, φh = solve(opH)
 
-    #@show typeof(φh)
-
     ######################### Elasticity
     # Assemble Elasticity RHS
     rhsE((τ1,τ2,v,η)) = FE(τ1,τ2) - GE(v)  + ∫(α*γ*(φh*(comp1∘τ1 + comp2∘τ2)))dΩ
@@ -218,6 +216,17 @@ module CoupledThermoElastic_mixed
                      ∫((∇⋅eσ1h)*(∇⋅eσ1h)+(∇⋅eσ2h)*(∇⋅eσ2h))dΩ))
   error_u = sqrt(sum(∫(euh⋅euh)dΩ))
   error_γ = sqrt(sum(∫(eγh*eγh)dΩ))
+
+  #--------------------------------------------------------------------------------
+  # Paraview 
+  #--------------------------------------------------------------------------------
+
+  if generate_output
+    vtk_dir = joinpath(@__DIR__, "paraview-data")
+      writevtk(Ω,joinpath(vtk_dir,"CoupledHeatElast_convergence_AFW=$(num_cells(model))"),order=1,
+            cellfields=["σ1"=>σh1,"σ2"=>σh2, "u"=>uh, "γ"=>γh, "θ"=>θh, "φ"=>φh])
+      writevtk(model,joinpath(vtk_dir,"CoupledHeatElast_model"))
+  end
 
   error_θ, error_φ, error_σ, error_u, error_γ, Gridap.FESpaces.num_free_dofs(XE) + Gridap.FESpaces.num_free_dofs(XH), it
   
